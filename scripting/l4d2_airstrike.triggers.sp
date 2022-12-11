@@ -1,6 +1,6 @@
 /*
 *	F-18 Airstrike - Triggers
-*	Copyright (C) 2020 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.3-tr"
+#define PLUGIN_VERSION		"1.4-tr"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.4-tr (11-Dec-2022)
+	- Changes to fix compile warnings on SourceMod 1.11.
 
 1.3-tr (10-May-2020)
 	- Various changes to tidy up code.
@@ -312,7 +315,7 @@ void LoadAirstrikes()
 // ====================================================================================================
 //					MENU - MAIN
 // ====================================================================================================
-public Action CmdAirstrikeMenu(int client, int args)
+Action CmdAirstrikeMenu(int client, int args)
 {
 	ShowMenuMain(client);
 	return Plugin_Handled;
@@ -329,7 +332,7 @@ void ShowMenuMain(int client)
 	hMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
+int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 	{
@@ -377,9 +380,11 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 			ShowMenuTrigger(client);
 		}
 	}
+
+	return 0;
 }
 
-public bool TraceFilter(int entity, int contentsMask)
+bool TraceFilter(int entity, int contentsMask)
 {
 	return entity > MaxClients;
 }
@@ -404,7 +409,7 @@ void ShowMenuTarget(int client)
 	hMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int TargetMenuHandler(Menu menu, MenuAction action, int client, int index)
+int TargetMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 	{
@@ -422,6 +427,8 @@ public int TargetMenuHandler(Menu menu, MenuAction action, int client, int index
 		index = StringToInt(sTemp);
 		ShowMenuTargetList(client, index);
 	}
+
+	return 0;
 }
 
 void ShowMenuTargetList(int client, int index)
@@ -487,7 +494,7 @@ void ShowMenuTargetList(int client, int index)
 	hMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int TargetListMenuHandler(Menu menu, MenuAction action, int client, int index)
+int TargetListMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 	{
@@ -540,6 +547,8 @@ public int TargetListMenuHandler(Menu menu, MenuAction action, int client, int i
 			ShowMenuTarget(client);
 		}
 	}
+
+	return 0;
 }
 
 
@@ -647,7 +656,7 @@ void ShowMenuTrigger(int client)
 	hMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int TrigMenuHandler(Menu menu, MenuAction action, int client, int index)
+int TrigMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 	{
@@ -674,6 +683,8 @@ public int TrigMenuHandler(Menu menu, MenuAction action, int client, int index)
 			ShowMenuTrigList(client, index);
 		}
 	}
+
+	return 0;
 }
 
 void ShowMenuTrigList(int client, int index)
@@ -744,7 +755,7 @@ void ShowMenuTrigList(int client, int index)
 	hMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int TrigListMenuHandler(Menu menu, MenuAction action, int client, int index)
+int TrigListMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 	{
@@ -841,6 +852,8 @@ public int TrigListMenuHandler(Menu menu, MenuAction action, int client, int ind
 			}
 		}
 	}
+
+	return 0;
 }
 
 
@@ -848,7 +861,7 @@ public int TrigListMenuHandler(Menu menu, MenuAction action, int client, int ind
 // ====================================================================================================
 //					MENU - TRIGGER BOX - REFIRE COUNT
 // ====================================================================================================
-public int RefireMenuHandler(Menu menu, MenuAction action, int client, int index)
+int RefireMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -919,6 +932,8 @@ public int RefireMenuHandler(Menu menu, MenuAction action, int client, int index
 
 		g_hMenuRefire.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 
@@ -926,7 +941,7 @@ public int RefireMenuHandler(Menu menu, MenuAction action, int client, int index
 // ====================================================================================================
 //					MENU - TRIGGER BOX - REFIRE TIME
 // ====================================================================================================
-public int TimeMenuHandler(Menu menu, MenuAction action, int client, int index)
+int TimeMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -984,6 +999,8 @@ public int TimeMenuHandler(Menu menu, MenuAction action, int client, int index)
 
 		g_hMenuTime.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 
@@ -991,7 +1008,7 @@ public int TimeMenuHandler(Menu menu, MenuAction action, int client, int index)
 // ====================================================================================================
 //					MENU - TRIGGER BOX - MAX AT ONCE
 // ====================================================================================================
-public int AtOnceMenuHandler(Menu menu, MenuAction action, int client, int index)
+int AtOnceMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1036,6 +1053,8 @@ public int AtOnceMenuHandler(Menu menu, MenuAction action, int client, int index
 
 		g_hMenuAtOnce.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 
@@ -1043,7 +1062,7 @@ public int AtOnceMenuHandler(Menu menu, MenuAction action, int client, int index
 // ====================================================================================================
 //					MENU - TRIGGER BOX - VMINS/VMAXS/VPOS - CALLBACKS
 // ====================================================================================================
-public int VMaxsMenuHandler(Menu menu, MenuAction action, int client, int index)
+int VMaxsMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1079,9 +1098,11 @@ public int VMaxsMenuHandler(Menu menu, MenuAction action, int client, int index)
 
 		g_hMenuVMaxs.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
-public int VMinsMenuHandler(Menu menu, MenuAction action, int client, int index)
+int VMinsMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1117,9 +1138,11 @@ public int VMinsMenuHandler(Menu menu, MenuAction action, int client, int index)
 
 		g_hMenuVMins.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
-public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
+int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1157,6 +1180,8 @@ public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 
 		g_hMenuPos.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 
@@ -1344,16 +1369,18 @@ void CreateTriggerMultiple(int index, float vPos[3], float vMaxs[3], float vMins
 	g_iTriggers[index-1] = EntIndexToEntRef(trigger);
 }
 
-public Action TimerEnable(Handle timer, any index)
+Action TimerEnable(Handle timer, any index)
 {
 	g_hTimerEnable[index] = null;
 
 	int entity = g_iTriggers[index];
 	if( IsValidEntRef(entity) )
 		AcceptEntityInput(entity, "Enable");
+
+	return Plugin_Continue;
 }
 
-public void OnStartTouch(const char[] output, int caller, int activator, float delay)
+void OnStartTouch(const char[] output, int caller, int activator, float delay)
 {
 	if( IsClientInGame(activator) && GetClientTeam(activator) == 2 )
 	{
@@ -1412,9 +1439,10 @@ void ShowAirStrike(int i)
 	F18_ShowAirstrike(g_vTargetZone[i], g_fTargetAng[i]);
 }
 
-public Action TimerCreate(Handle timer, any i)
+Action TimerCreate(Handle timer, any i)
 {
 	F18_ShowAirstrike(g_vTargetZone[i], g_fTargetAng[i]);
+	return Plugin_Continue;
 }
 
 
@@ -1422,7 +1450,7 @@ public Action TimerCreate(Handle timer, any i)
 // ====================================================================================================
 //					TRIGGER BOX - DISPLAY BEAM BOX
 // ====================================================================================================
-public Action TimerBeam(Handle timer)
+Action TimerBeam(Handle timer)
 {
 	if( IsValidEntRef(g_iSelectedTrig) )
 	{

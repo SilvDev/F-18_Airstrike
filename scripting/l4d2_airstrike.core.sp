@@ -1,6 +1,6 @@
 /*
 *	F-18 Airstrike
-*	Copyright (C) 2020 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.8"
+#define PLUGIN_VERSION		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (11-Dec-2022)
+	- Changes to fix compile warnings on SourceMod 1.11.
 
 1.8 (24-Jul-2021)
 	- Added a 0.1 second delay between Airstrikes if multiple are detected within the same frame.
@@ -161,7 +164,7 @@ float g_fLastAirstrike; // Delay airstrike
 // ====================================================================================================
 //					NATIVES
 // ====================================================================================================
-public int Native_ShowAirstrike(Handle plugin, int numParams)
+int Native_ShowAirstrike(Handle plugin, int numParams)
 {
 	if( g_bCvarAllow )
 	{
@@ -169,6 +172,8 @@ public int Native_ShowAirstrike(Handle plugin, int numParams)
 		GetNativeArray(1, vPos, sizeof(vPos));
 		ShowAirstrike(vPos, GetNativeCell(2));
 	}
+
+	return 0;
 }
 
 
@@ -353,12 +358,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -477,7 +482,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -494,30 +499,31 @@ public void OnGamemode(const char[] output, int caller, int activator, float del
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin();
 	OnRoundState(0);
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 1 && g_iRoundStart == 0 )
 		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iRoundStart = 1;
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 0 && g_iRoundStart == 1 )
 		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iPlayerSpawn = 1;
 }
 
-public Action TimerStart(Handle timer)
+Action TimerStart(Handle timer)
 {
 	ResetPlugin();
 	OnRoundState(1);
+	return Plugin_Continue;
 }
 
 void OnRoundState(int roundstate)
@@ -545,7 +551,7 @@ void OnRoundState(int roundstate)
 // ====================================================================================================
 //					COMMANDS
 // ====================================================================================================
-public Action CmdAirstrikeMake(int client, int args)
+Action CmdAirstrikeMake(int client, int args)
 {
 	// Specific client and type
 	if( args == 2 )
@@ -643,7 +649,7 @@ public Action CmdAirstrikeMake(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdAirstrikeMenu(int client, int args)
+Action CmdAirstrikeMenu(int client, int args)
 {
 	if( g_bCvarAllow )
 		ShowMenuMain(client);
@@ -661,7 +667,7 @@ void ShowMenuMain(int client)
 	hMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
+int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 	{
@@ -705,9 +711,11 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 			FakeClientCommand(client, "sm_strike_triggers");
 		}
 	}
+
+	return 0;
 }
 
-public bool TraceFilter(int entity, int contentsMask)
+bool TraceFilter(int entity, int contentsMask)
 {
 	return entity > MaxClients;
 }
@@ -717,7 +725,7 @@ public bool TraceFilter(int entity, int contentsMask)
 // ====================================================================================================
 //					SHOW AIRSTRIKE
 // ====================================================================================================
-public Action TimerDelayStrike(Handle timer, DataPack dPack)
+Action TimerDelayStrike(Handle timer, DataPack dPack)
 {
 	dPack.Reset();
 	float vPos[3];
@@ -730,6 +738,8 @@ public Action TimerDelayStrike(Handle timer, DataPack dPack)
 	ShowAirstrike(vPos, direction);
 
 	delete dPack;
+
+	return Plugin_Continue;
 }
 
 void ShowAirstrike(float vPos[3], float direction)
@@ -809,13 +819,15 @@ void ShowAirstrike(float vPos[3], float direction)
 	Call_Finish();
 }
 
-public Action TimerGrav(Handle timer, any entity)
+Action TimerGrav(Handle timer, any entity)
 {
 	if( IsValidEntRef(entity) )
 		CreateTimer(0.1, TimerGravity, entity, TIMER_REPEAT);
+
+	return Plugin_Continue;
 }
 
-public Action TimerGravity(Handle timer, any entity)
+Action TimerGravity(Handle timer, any entity)
 {
 	if( IsValidEntRef(entity) )
 	{
@@ -840,7 +852,7 @@ public Action TimerGravity(Handle timer, any entity)
 	return Plugin_Stop;
 }
 
-public Action TimerDrop(Handle timer, any f18)
+Action TimerDrop(Handle timer, any f18)
 {
 	if( IsValidEntRef(f18) )
 	{
@@ -992,6 +1004,8 @@ public Action TimerDrop(Handle timer, any f18)
 			case 8:		EmitSoundToAll(SOUND_PASS8, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
 		}
 	}
+
+	return Plugin_Continue;
 }
 
 void MoveForward(const float vPos[3], const float vAng[3], float vReturn[3], float fDistance)
@@ -1037,7 +1051,7 @@ void DmgHookUnhook(bool allowed)
 	}
 }
 
-public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	if( damagetype & DMG_BLAST && victim > 0 && victim <= MaxClients && GetEntProp(inflictor, Prop_Data, "m_iHammerID") == 1078682 && GetClientTeam(victim) == 2 )
 	{
@@ -1047,7 +1061,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 	return Plugin_Continue;
 }
 
-public void OnBombTouch(int entity, int activator)
+void OnBombTouch(int entity, int activator)
 {
 	char sTemp[10];
 	GetEdictClassname(activator, sTemp, sizeof(sTemp));
@@ -1060,10 +1074,10 @@ public void OnBombTouch(int entity, int activator)
 	}
 }
 
-public Action TimerBombTouch(Handle timer, any entity)
+Action TimerBombTouch(Handle timer, any entity)
 {
 	if( EntRefToEntIndex(entity) == INVALID_ENT_REFERENCE )
-		return;
+		return Plugin_Continue;
 
 	if( g_iCvarHorde && GetRandomInt(1, 100) <= g_iCvarHorde )
 	{
@@ -1193,6 +1207,8 @@ public Action TimerBombTouch(Handle timer, any entity)
 		EmitSoundToAll(SOUND_EXPLODE4, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
 	else if( random == 2 )
 		EmitSoundToAll(SOUND_EXPLODE5, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
+
+	return Plugin_Continue;
 }
 
 static const char g_sVocalize[][] =

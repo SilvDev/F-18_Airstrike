@@ -1,6 +1,6 @@
 /*
 *	F-18 Airstrike - Tank
-*	Copyright (C) 2020 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -129,7 +129,7 @@ public void F18_OnRoundState(int roundstate)
 // ====================================================================================================
 //					CREATE AIRSTRIKE
 // ====================================================================================================
-public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_bLoaded == true )
 	{

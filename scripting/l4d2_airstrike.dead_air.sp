@@ -1,6 +1,6 @@
 /*
 *	F-18 Airstrike - Dead Air
-*	Copyright (C) 2020 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.3-da"
+#define PLUGIN_VERSION		"1.4-da"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.4-da (11-Dec-2022)
+	- Changes to fix compile warnings on SourceMod 1.11.
 
 1.3-da (10-May-2020)
 	- Various changes to tidy up code.
@@ -139,7 +142,7 @@ public void F18_OnRoundState(int roundstate)
 // ====================================================================================================
 //					CREATE AIRSTRIKE
 // ====================================================================================================
-public Action TimerStart(Handle timer, any count)
+Action TimerStart(Handle timer, any count)
 {
 	if( g_iCounter == count )
 	{
@@ -157,11 +160,13 @@ public Action TimerStart(Handle timer, any count)
 					GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", g_vPos);
 					g_iEntity = EntIndexToEntRef(entity);
 					c11m3 = true;
-					return;
+					return Plugin_Continue;
 				}
 			}
 		}
 	}
+
+	return Plugin_Continue;
 }
 
 public void F18_OnMissileHit(float vPos[3])
