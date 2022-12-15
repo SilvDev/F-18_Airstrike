@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.9"
+#define PLUGIN_VERSION		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (15-Dec-2022)
+	- Removed one of the explosion effects that were temperamental. Thanks to "choppledpickusfungus" for reporting.
 
 1.9 (11-Dec-2022)
 	- Changes to fix compile warnings on SourceMod 1.11.
@@ -115,7 +118,6 @@
 #include <sdkhooks>
 // #include <l4d2_airstrike>
 
-// #define GAMEDATA			"l4d2_airstrike"
 #define CVAR_FLAGS			FCVAR_NOTIFY
 #define CHAT_TAG			"\x03[Airstrike] \x05"
 #define MAX_ENTITIES		8
@@ -139,7 +141,7 @@
 #define SOUND_EXPLODE4		"weapons/hegrenade/explode4.wav"
 #define SOUND_EXPLODE5		"weapons/hegrenade/explode5.wav"
 
-#define PARTICLE_BOMB1		"FluidExplosion_fps"
+// #define PARTICLE_BOMB1		"FluidExplosion_fps" // Broken? Only shows sometimes
 #define PARTICLE_BOMB2		"missile_hit1"
 #define PARTICLE_BOMB3		"gas_explosion_main"
 #define PARTICLE_BOMB4		"explosion_huge"
@@ -153,7 +155,6 @@ ConVar g_hCvarAllow, g_hCvarDamage, g_hCvarDistance, g_hCvarHorde, g_hCvarMPGame
 int g_iCvarDamage, g_iCvarDistance, g_iCvarHorde, g_iCvarLimit, g_iCvarScale, g_iCvarShake, g_iCvarSpread, g_iCvarStumble, g_iCvarStyle, g_iCvarVocalize;
 bool g_bCvarAllow, g_bMapStarted;
 
-// Handle g_hConfStagger; // Stagger: SDKCall method
 Handle g_hForwardOnAirstrike, g_hForwardOnMissileHit, g_hForwardPluginState, g_hForwardRoundState;
 int g_iEntities[MAX_ENTITIES], g_iPlayerSpawn, g_iRoundStart;
 bool g_bDmgHooked, g_bLateLoad, g_bPluginTrigger;
@@ -208,26 +209,6 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 public void OnPluginStart()
 {
-	/* Stagger: SDKCall method
-	char sPath[PLATFORM_MAX_PATH];
-	BuildPath(Path_SM, sPath, sizeof(sPath), "gamedata/%s.txt", GAMEDATA);
-	if( FileExists(sPath) == false ) SetFailState("\n==========\nMissing required file: \"%s\".\nRead installation instructions again.\n==========", sPath);
-
-	Handle hGameData = LoadGameConfigFile(GAMEDATA);
-	if( hGameData == null ) SetFailState("Failed to load \"%s.txt\" gamedata.", GAMEDATA);
-
-	StartPrepSDKCall(SDKCall_Player);
-	if( PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "CTerrorPlayer::OnStaggered") == false )
-		SetFailState("Could not load the 'CTerrorPlayer::OnStaggered' gamedata signature.");
-	PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer);
-	PrepSDKCall_AddParameter(SDKType_Vector, SDKPass_ByRef);
-	g_hConfStagger = EndPrepSDKCall();
-	if( g_hConfStagger == null )
-		SetFailState("Could not prep the 'CTerrorPlayer::OnStaggered' function.");
-
-	delete hGameData;
-	// */
-
 	g_hForwardOnAirstrike = CreateGlobalForward("F18_OnAirstrike", ET_Ignore, Param_Array);
 	g_hForwardOnMissileHit = CreateGlobalForward("F18_OnMissileHit", ET_Ignore, Param_Array);
 	g_hForwardPluginState = CreateGlobalForward("F18_OnPluginState", ET_Ignore, Param_Cell);
@@ -291,7 +272,7 @@ public void OnLibraryRemoved(const char[] name)
 public void OnMapStart()
 {
 	g_bMapStarted = true;
-	PrecacheParticle(PARTICLE_BOMB1);
+	// PrecacheParticle(PARTICLE_BOMB1);
 	PrecacheParticle(PARTICLE_BOMB2);
 	PrecacheParticle(PARTICLE_BOMB3);
 	PrecacheParticle(PARTICLE_BOMB4);
@@ -1155,7 +1136,6 @@ Action TimerBombTouch(Handle timer, any entity)
 				if( g_iCvarStumble && fDistance <= g_iCvarStumble )
 				{
 					StaggerClient(GetClientUserId(i), vPos);
-					// SDKCall(g_hConfStagger, i, shake, vPos); // Stagger: SDKCall method
 				}
 			}
 		}
@@ -1171,18 +1151,19 @@ Action TimerBombTouch(Handle timer, any entity)
 	entity = CreateEntityByName("info_particle_system");
 	if( entity != -1 )
 	{
-		int random = GetRandomInt(1, 4);
+		int random = GetRandomInt(2, 4);
+
 		switch( random )
 		{
-			case 1:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB1);
+			// case 1:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB1);
 			case 2:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB2);
 			case 3:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB3);
 			case 4:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB4);
 		}
 
-		if( random == 1 )
-			vPos[2] += 175.0;
-		else if( random == 2 )
+		// if( random == 1 )
+			// vPos[2] += 175.0;
+		if( random == 2 )
 			vPos[2] += 100.0;
 		else if( random == 4 )
 			vPos[2] += 25.0;
