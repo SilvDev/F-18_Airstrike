@@ -1,6 +1,6 @@
 /*
 *	F-18 Airstrike
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.10"
+#define PLUGIN_VERSION		"1.11"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,12 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (25-Oct-2023)
+	- Added cvar "l4d2_airstrike_manual" to set how many Airstrikes should hit when using the command or menu to trigger. Requested by "ForTheSakura".
+	- Added cvar "l4d2_airstrike_ring" to display a beam ring at the target position. Requested by "ForTheSakura".
+	- Changed command "sm_strikes" to allow specifying how many Airstrikes should hit when using the command (overrides the cvar value). Requested by "ForTheSakura".
+	- Fixed missing translations. Thanks to "ForTheSakura" for reporting.
 
 1.10 (15-Dec-2022)
 	- Removed one of the explosion effects that were temperamental. Thanks to "choppledpickusfungus" for reporting.
@@ -121,10 +127,14 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 #define CHAT_TAG			"\x03[Airstrike] \x05"
 #define MAX_ENTITIES		8
+#define DELAY_INTERVAL		5.0 // Delay between multiple strikes using the manual cvar, 10.0 = every 0.1s, 5.0 = every 0.2s
 
 #define MODEL_AGM65			"models/missiles/f18_agm65maverick.mdl"
 #define MODEL_F18			"models/f18/f18_sb.mdl"
 #define MODEL_BOX			"models/props/cs_militia/silo_01.mdl"
+
+#define SPRITE_BEAM			"materials/sprites/laserbeam.vmt"
+#define SPRITE_HALO			"materials/sprites/glow01.vmt"
 
 // #define SOUND_OVER1			"ambient/overhead/plane1.wav"
 // #define SOUND_OVER2			"ambient/overhead/plane2.wav"
@@ -151,14 +161,22 @@
 #define PARTICLE_SMOKE		"rpg_smoke"
 
 
-ConVar g_hCvarAllow, g_hCvarDamage, g_hCvarDistance, g_hCvarHorde, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarLimit, g_hCvarScale, g_hCvarShake, g_hCvarSpread, g_hCvarStumble, g_hCvarStyle, g_hCvarVocalize;
-int g_iCvarDamage, g_iCvarDistance, g_iCvarHorde, g_iCvarLimit, g_iCvarScale, g_iCvarShake, g_iCvarSpread, g_iCvarStumble, g_iCvarStyle, g_iCvarVocalize;
+ConVar g_hCvarAllow, g_hCvarDamage, g_hCvarDistance, g_hCvarHorde, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarLimit, g_hCvarManual, g_hCvarRing, g_hCvarScale, g_hCvarShake, g_hCvarSpread, g_hCvarStumble, g_hCvarStyle, g_hCvarVocalize;
+int g_iCvarDamage, g_iCvarDistance, g_iCvarHorde, g_iCvarLimit, g_iCvarManual, g_iCvarRing, g_iCvarScale, g_iCvarShake, g_iCvarSpread, g_iCvarStumble, g_iCvarStyle, g_iCvarVocalize;
 bool g_bCvarAllow, g_bMapStarted;
 
 Handle g_hForwardOnAirstrike, g_hForwardOnMissileHit, g_hForwardPluginState, g_hForwardRoundState;
-int g_iEntities[MAX_ENTITIES], g_iPlayerSpawn, g_iRoundStart;
+int g_iBeamSprite, g_iHaloSprite, g_iPlayerSpawn, g_iRoundStart, g_iEntities[MAX_ENTITIES];
 bool g_bDmgHooked, g_bLateLoad, g_bPluginTrigger;
 float g_fLastAirstrike; // Delay airstrike
+
+enum
+{
+	RING_OFF,
+	RING_AIM,
+	RING_POS,
+	RING_ALL
+}
 
 
 
@@ -171,6 +189,8 @@ int Native_ShowAirstrike(Handle plugin, int numParams)
 	{
 		float vPos[3];
 		GetNativeArray(1, vPos, sizeof(vPos));
+
+		if( g_iCvarRing & RING_ALL ) CreateBeamRing(vPos);
 		ShowAirstrike(vPos, GetNativeCell(2));
 	}
 
@@ -222,6 +242,8 @@ public void OnPluginStart()
 	g_hCvarModesOff =		CreateConVar(	"l4d2_airstrike_modes_off",		"",				"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
 	g_hCvarModesTog =		CreateConVar(	"l4d2_airstrike_modes_tog",		"0",			"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
 	g_hCvarLimit =			CreateConVar(	"l4d2_airstrike_limit",			"8",			"Maximum number of simultaneous airstrikes.", CVAR_FLAGS, true, 0.0, true, float(MAX_ENTITIES) );
+	g_hCvarManual =			CreateConVar(	"l4d2_airstrike_manual",		"1",			"How many airstrikes appear when manually triggering by menu or command.", CVAR_FLAGS, true, 0.0, true, float(MAX_ENTITIES) );
+	g_hCvarRing =			CreateConVar(	"l4d2_airstrike_ring",			"3",			"Display a red ring where the target will hit: 0=Off. 1=Airstrike on Crosshair (cmd/menu). 2=Airstrike on Position (cmd/menu). 4=Airstrikes not from cmd/menu. Add numbers together.", CVAR_FLAGS );
 	g_hCvarScale =			CreateConVar(	"l4d2_airstrike_scale",			"50",			"0=Off. Percentage of damage to survivors. Can be 50% or 200% etc.", CVAR_FLAGS );
 	g_hCvarShake =			CreateConVar(	"l4d2_airstrike_shake",			"1000",			"The range at which the explosion can shake players screens.", CVAR_FLAGS );
 	g_hCvarSpread =			CreateConVar(	"l4d2_airstrike_spread",		"100",			"The maximum distance to vary the missile target zone.", CVAR_FLAGS );
@@ -241,6 +263,8 @@ public void OnPluginStart()
 	g_hCvarDistance.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarHorde.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarLimit.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarManual.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarRing.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarScale.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarShake.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSpread.AddChangeHook(ConVarChanged_Cvars);
@@ -250,6 +274,8 @@ public void OnPluginStart()
 
 	RegAdminCmd("sm_strike",	CmdAirstrikeMenu, ADMFLAG_ROOT, "Displays a menu with options to show/save an airstrike and triggers.");
 	RegAdminCmd("sm_strikes",	CmdAirstrikeMake, ADMFLAG_ROOT, "Create an Airstrike. Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> OR vector position <X> <Y> <Z> <angle>");
+
+	LoadTranslations("common.phrases");
 }
 
 public void OnPluginEnd()
@@ -280,6 +306,8 @@ public void OnMapStart()
 	PrecacheParticle(PARTICLE_FIRE);
 	PrecacheParticle(PARTICLE_SMOKE);
 	PrecacheParticle(PARTICLE_SPARKS);
+	g_iBeamSprite = PrecacheModel(SPRITE_BEAM, true);
+	g_iHaloSprite = PrecacheModel(SPRITE_HALO, true);
 	PrecacheModel(MODEL_AGM65, true);
 	PrecacheModel(MODEL_F18, true);
 	PrecacheModel(MODEL_BOX, true);
@@ -355,6 +383,8 @@ void GetCvars()
 	g_iCvarDistance = g_hCvarDistance.IntValue;
 	g_iCvarHorde = g_hCvarHorde.IntValue;
 	g_iCvarLimit = g_hCvarLimit.IntValue;
+	g_iCvarManual = g_hCvarManual.IntValue;
+	g_iCvarRing = g_hCvarRing.IntValue;
 	g_iCvarScale = g_hCvarScale.IntValue;
 	g_iCvarShake = g_hCvarShake.IntValue;
 	g_iCvarSpread = g_hCvarSpread.IntValue;
@@ -535,7 +565,7 @@ void OnRoundState(int roundstate)
 Action CmdAirstrikeMake(int client, int args)
 {
 	// Specific client and type
-	if( args == 2 )
+	if( args == 2 || args == 3 )
 	{
 		char arg1[32];
 
@@ -544,7 +574,7 @@ Action CmdAirstrikeMake(int client, int args)
 		int type = StringToInt(arg1);
 		if( type != 1 && type != 2 )
 		{
-			ReplyToCommand(client, "Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> OR vector position <X> <Y> <Z> <angle>");
+			ReplyToCommand(client, "Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> OR vector position <X> <Y> <Z> <angle> [optional number of airstrikes]");
 			return Plugin_Handled;
 		}
 
@@ -570,6 +600,18 @@ Action CmdAirstrikeMake(int client, int args)
 
 		float vPos[3], vAng[3], direction;
 		int target;
+		int count;
+
+		if( args == 3 )
+		{
+			GetCmdArg(3, arg1, sizeof(arg1));
+			count = StringToInt(arg1);
+			if( count > g_iCvarLimit ) count = g_iCvarLimit;
+		}
+		else
+		{
+			count = g_iCvarManual;
+		}
 
 		for( int i = 0; i < target_count; i++ )
 		{
@@ -591,22 +633,54 @@ Action CmdAirstrikeMake(int client, int args)
 					vPos[0] = vStart[0] + vAng[0];
 					vPos[1] = vStart[1] + vAng[1];
 					vPos[2] = vStart[2] + vAng[2];
+
+					// Multiple strikes
+					if( count > 1 )
+					{
+						for( int x = 1; x < count; x++ )
+						{
+							DataPack dPack = new DataPack();
+							dPack.WriteCell(vPos[0]);
+							dPack.WriteCell(vPos[1]);
+							dPack.WriteCell(vPos[2]);
+							dPack.WriteCell(direction);
+							CreateTimer(x / DELAY_INTERVAL, TimerDelayStrike, dPack);
+						}
+					}
+
+					if( g_iCvarRing & RING_AIM ) CreateBeamRing(vPos);
 					ShowAirstrike(vPos, direction);
-					// PrintToServer("ShowAirstrikeA %d",target_count);
 				}
 
 				delete hTrace;
-			} else {
+			}
+			else
+			{
 				GetClientAbsOrigin(target, vPos);
 				GetClientEyeAngles(target, vAng);
+
+				// Multiple strikes
+				if( count > 1 )
+				{
+					for( int x = 1; x < count; x++ )
+					{
+						DataPack dPack = new DataPack();
+						dPack.WriteCell(vPos[0]);
+						dPack.WriteCell(vPos[1]);
+						dPack.WriteCell(vPos[2]);
+						dPack.WriteCell(vAng[1]);
+						CreateTimer(x / DELAY_INTERVAL, TimerDelayStrike, dPack);
+					}
+				}
+
+				if( g_iCvarRing & RING_POS ) CreateBeamRing(vPos);
 				ShowAirstrike(vPos, vAng[1]);
-				// PrintToServer("ShowAirstrikeB %d",target_count);
 			}
 		}
 	}
 
 	// Specific position
-	else if( args == 4 )
+	else if( args == 4 || args == 5 )
 	{
 		char arg1[32];
 		float vPos[3];
@@ -619,12 +693,37 @@ Action CmdAirstrikeMake(int client, int args)
 		vPos[2] = StringToFloat(arg1);
 
 		GetCmdArg(4, arg1, sizeof(arg1));
-		ShowAirstrike(vPos, StringToFloat(arg1));
+		float direction = StringToFloat(arg1);
+
+		// Multiple strikes
+		int count = g_iCvarManual;
+		if( args == 5 )
+		{
+			GetCmdArg(5, arg1, sizeof(arg1));
+			count = StringToInt(arg1);
+			if( count > g_iCvarLimit ) count = g_iCvarLimit;
+		}
+
+		if( count > 1 )
+		{
+			for( int x = 1; x < count; x++ )
+			{
+				DataPack dPack = new DataPack();
+				dPack.WriteCell(vPos[0]);
+				dPack.WriteCell(vPos[1]);
+				dPack.WriteCell(vPos[2]);
+				dPack.WriteCell(direction);
+				CreateTimer(x / DELAY_INTERVAL, TimerDelayStrike, dPack);
+			}
+		}
+
+		if( g_iCvarRing & RING_POS ) CreateBeamRing(vPos);
+		ShowAirstrike(vPos, direction);
 	}
 
 	else
 	{
-		ReplyToCommand(client, "Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> OR vector position <X> <Y> <Z> <angle>");
+		ReplyToCommand(client, "Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> OR vector position <X> <Y> <Z> <angle> [optional number of airstrikes]");
 	}
 
 	return Plugin_Handled;
@@ -673,10 +772,27 @@ int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 				vPos[0] = vStart[0] + vAng[0];
 				vPos[1] = vStart[1] + vAng[1];
 				vPos[2] = vStart[2] + vAng[2];
+
+				// Multiple strikes
+				if( g_iCvarManual > 1 )
+				{
+					for( int x = 1; x < g_iCvarManual; x++ )
+					{
+						DataPack dPack = new DataPack();
+						dPack.WriteCell(vPos[0]);
+						dPack.WriteCell(vPos[1]);
+						dPack.WriteCell(vPos[2]);
+						dPack.WriteCell(direction);
+						CreateTimer(x / DELAY_INTERVAL, TimerDelayStrike, dPack);
+					}
+				}
+
+				if( g_iCvarRing & RING_AIM ) CreateBeamRing(vStart);
 				ShowAirstrike(vPos, direction);
 			}
 
 			delete trace;
+
 			ShowMenuMain(client);
 		}
 		else if( index == 1 )
@@ -684,7 +800,24 @@ int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 			float vPos[3], vAng[3];
 			GetClientAbsOrigin(client, vPos);
 			GetClientEyeAngles(client, vAng);
+
+			// Multiple strikes
+			if( g_iCvarManual > 1 )
+			{
+				for( int x = 1; x < g_iCvarManual; x++ )
+				{
+					DataPack dPack = new DataPack();
+					dPack.WriteCell(vPos[0]);
+					dPack.WriteCell(vPos[1]);
+					dPack.WriteCell(vPos[2]);
+					dPack.WriteCell(vAng[1]);
+					CreateTimer(x / DELAY_INTERVAL, TimerDelayStrike, dPack);
+				}
+			}
+
+			if( g_iCvarRing & RING_POS ) CreateBeamRing(vPos);
 			ShowAirstrike(vPos, vAng[1]);
+
 			ShowMenuMain(client);
 		}
 		else if( index == 2 )
@@ -701,6 +834,59 @@ bool TraceFilter(int entity, int contentsMask)
 	return entity > MaxClients;
 }
 
+void CreateBeamRing(float vPos[3])
+{
+    int colors[4];
+    colors[0] = 255;
+    colors[1] = 0;
+    colors[2] = 0;
+    colors[3] = 45;
+
+    vPos[2] += 10.0;
+    TE_SetupBeamRingPoint(vPos, 100.0, float(g_iCvarDistance), g_iBeamSprite, g_iHaloSprite, 0, 0, 1.85, 2.5, 0.0, colors, 0, 0);
+    TE_SendToAll();
+    
+    colors[3] = 245;
+    
+    TE_SetupBeamRingPoint(vPos, 20.0, g_iCvarDistance / 10.0, g_iBeamSprite, g_iHaloSprite, 0, 0, 1.85, 1.5, 0.0, colors, 0, 0);
+    TE_SendToAll();
+    
+    colors[3] = 220;
+
+    TE_SetupBeamRingPoint(vPos, 30.0, g_iCvarDistance / 8.0, g_iBeamSprite, g_iHaloSprite, 0, 0, 1.85, 1.625, 0.0, colors, 0, 0);
+    TE_SendToAll();
+    
+    colors[3] = 195;
+    
+    TE_SetupBeamRingPoint(vPos, 40.0, g_iCvarDistance / 6.25, g_iBeamSprite, g_iHaloSprite, 0, 0, 1.85, 1.75, 0.0, colors, 0, 0);
+    TE_SendToAll();
+    
+    colors[3] = 170;
+    
+    TE_SetupBeamRingPoint(vPos, 50.0, g_iCvarDistance / 4.75, g_iBeamSprite, g_iHaloSprite, 0, 0, 1.85, 1.875, 0.0, colors, 0, 0);
+    TE_SendToAll();
+    
+    colors[3] = 145;
+    
+    TE_SetupBeamRingPoint(vPos, 60.0, g_iCvarDistance / 3.5, g_iBeamSprite, g_iHaloSprite, 0, 0, 1.85, 2.0, 0.0, colors, 0, 0);
+    TE_SendToAll();
+    
+    colors[3] = 120;
+
+    TE_SetupBeamRingPoint(vPos, 70.0, g_iCvarDistance / 2.5, g_iBeamSprite, g_iHaloSprite, 0, 0, 1.85, 2.125, 0.0, colors, 0, 0);
+    TE_SendToAll();
+    
+    colors[3] = 95;
+    
+    TE_SetupBeamRingPoint(vPos, 80.0, g_iCvarDistance / 1.75, g_iBeamSprite, g_iHaloSprite, 0, 0, 1.85, 2.25, 0.0, colors, 0, 0);
+    TE_SendToAll();
+    
+    colors[3] = 70;
+    
+    TE_SetupBeamRingPoint(vPos, 90.0, g_iCvarDistance / 1.25, g_iBeamSprite, g_iHaloSprite, 0, 0, 1.85, 2.375, 0.0, colors, 0, 0);
+    TE_SendToAll();
+}
+
 
 
 // ====================================================================================================
@@ -708,9 +894,9 @@ bool TraceFilter(int entity, int contentsMask)
 // ====================================================================================================
 Action TimerDelayStrike(Handle timer, DataPack dPack)
 {
-	dPack.Reset();
 	float vPos[3];
 	float direction;
+	dPack.Reset();
 	vPos[0] = dPack.ReadCell();
 	vPos[1] = dPack.ReadCell();
 	vPos[2] = dPack.ReadCell();
@@ -736,6 +922,7 @@ void ShowAirstrike(float vPos[3], float direction)
 		CreateTimer(0.1, TimerDelayStrike, dPack);
 		return;
 	}
+
 	g_fLastAirstrike = GetGameTime();
 
 	// Find index
@@ -800,7 +987,7 @@ void ShowAirstrike(float vPos[3], float direction)
 	Call_Finish();
 }
 
-Action TimerGrav(Handle timer, any entity)
+Action TimerGrav(Handle timer, int entity)
 {
 	if( IsValidEntRef(entity) )
 		CreateTimer(0.1, TimerGravity, entity, TIMER_REPEAT);
@@ -808,7 +995,7 @@ Action TimerGrav(Handle timer, any entity)
 	return Plugin_Continue;
 }
 
-Action TimerGravity(Handle timer, any entity)
+Action TimerGravity(Handle timer, int entity)
 {
 	if( IsValidEntRef(entity) )
 	{
@@ -833,7 +1020,7 @@ Action TimerGravity(Handle timer, any entity)
 	return Plugin_Stop;
 }
 
-Action TimerDrop(Handle timer, any f18)
+Action TimerDrop(Handle timer, int f18)
 {
 	if( IsValidEntRef(f18) )
 	{
@@ -1055,7 +1242,7 @@ void OnBombTouch(int entity, int activator)
 	}
 }
 
-Action TimerBombTouch(Handle timer, any entity)
+Action TimerBombTouch(Handle timer, int entity)
 {
 	if( EntRefToEntIndex(entity) == INVALID_ENT_REFERENCE )
 		return Plugin_Continue;

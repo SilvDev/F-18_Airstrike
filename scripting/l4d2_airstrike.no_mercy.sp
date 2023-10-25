@@ -142,7 +142,7 @@ public void F18_OnRoundState(int roundstate)
 // ====================================================================================================
 //					CREATE AIRSTRIKE
 // ====================================================================================================
-Action TimerStart(Handle timer, any count)
+Action TimerStart(Handle timer, int count)
 {
 	if( g_iCounter == count )
 	{
