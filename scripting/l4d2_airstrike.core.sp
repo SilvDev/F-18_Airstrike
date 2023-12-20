@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.11"
+#define PLUGIN_VERSION		"1.12"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.12 (20-Dec-2023)
+	- Added cvar "l4d2_airstrike_time" to set the interval between multiple Airstrikes. Requested by "bsdvjhdabf".
+	- Changes to make calling triggering the horde more reliable.
 
 1.11 (25-Oct-2023)
 	- Added cvar "l4d2_airstrike_manual" to set how many Airstrikes should hit when using the command or menu to trigger. Requested by "ForTheSakura".
@@ -127,7 +131,6 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 #define CHAT_TAG			"\x03[Airstrike] \x05"
 #define MAX_ENTITIES		8
-#define DELAY_INTERVAL		5.0 // Delay between multiple strikes using the manual cvar, 10.0 = every 0.1s, 5.0 = every 0.2s
 
 #define MODEL_AGM65			"models/missiles/f18_agm65maverick.mdl"
 #define MODEL_F18			"models/f18/f18_sb.mdl"
@@ -161,14 +164,14 @@
 #define PARTICLE_SMOKE		"rpg_smoke"
 
 
-ConVar g_hCvarAllow, g_hCvarDamage, g_hCvarDistance, g_hCvarHorde, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarLimit, g_hCvarManual, g_hCvarRing, g_hCvarScale, g_hCvarShake, g_hCvarSpread, g_hCvarStumble, g_hCvarStyle, g_hCvarVocalize;
+ConVar g_hCvarAllow, g_hCvarDamage, g_hCvarDistance, g_hCvarHorde, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarLimit, g_hCvarManual, g_hCvarRing, g_hCvarScale, g_hCvarShake, g_hCvarSpread, g_hCvarStumble, g_hCvarStyle, g_hCvarTime, g_hCvarVocalize;
 int g_iCvarDamage, g_iCvarDistance, g_iCvarHorde, g_iCvarLimit, g_iCvarManual, g_iCvarRing, g_iCvarScale, g_iCvarShake, g_iCvarSpread, g_iCvarStumble, g_iCvarStyle, g_iCvarVocalize;
 bool g_bCvarAllow, g_bMapStarted;
 
 Handle g_hForwardOnAirstrike, g_hForwardOnMissileHit, g_hForwardPluginState, g_hForwardRoundState;
 int g_iBeamSprite, g_iHaloSprite, g_iPlayerSpawn, g_iRoundStart, g_iEntities[MAX_ENTITIES];
 bool g_bDmgHooked, g_bLateLoad, g_bPluginTrigger;
-float g_fLastAirstrike; // Delay airstrike
+float g_fCvarTime, g_fLastAirstrike; // Delay airstrike
 
 enum
 {
@@ -249,6 +252,7 @@ public void OnPluginStart()
 	g_hCvarSpread =			CreateConVar(	"l4d2_airstrike_spread",		"100",			"The maximum distance to vary the missile target zone.", CVAR_FLAGS );
 	g_hCvarStumble =		CreateConVar(	"l4d2_airstrike_stumble",		"400",			"0=Off, Range at which players are stumbled from the explosion.", CVAR_FLAGS );
 	g_hCvarStyle =			CreateConVar(	"l4d2_airstrike_style",			"15",			"1=Blue Fire, 2=Flames, 4=Sparks, 8=RPG Smoke, 15=All.", CVAR_FLAGS );
+	g_hCvarTime =			CreateConVar(	"l4d2_airstrike_time",			"0.2",			"The time delay interval between multiple airstrikes.", CVAR_FLAGS );
 	g_hCvarVocalize =		CreateConVar(	"l4d2_airstrike_vocalize",		"20",			"0=Off. The chance out of 100 to vocalize the player nearest the explosion.", CVAR_FLAGS );
 	CreateConVar(							"l4d2_airstrike_version",		PLUGIN_VERSION,	"F-18 Airstrike plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,					"l4d2_airstrike");
@@ -270,10 +274,11 @@ public void OnPluginStart()
 	g_hCvarSpread.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarStumble.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarStyle.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarTime.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarVocalize.AddChangeHook(ConVarChanged_Cvars);
 
 	RegAdminCmd("sm_strike",	CmdAirstrikeMenu, ADMFLAG_ROOT, "Displays a menu with options to show/save an airstrike and triggers.");
-	RegAdminCmd("sm_strikes",	CmdAirstrikeMake, ADMFLAG_ROOT, "Create an Airstrike. Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> OR vector position <X> <Y> <Z> <angle>");
+	RegAdminCmd("sm_strikes",	CmdAirstrikeMake, ADMFLAG_ROOT, "Create an Airstrike. Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> [optional number of airstrikes] -OR- vector position <X> <Y> <Z> <angle> [optional number of airstrikes]");
 
 	LoadTranslations("common.phrases");
 }
@@ -390,6 +395,7 @@ void GetCvars()
 	g_iCvarSpread = g_hCvarSpread.IntValue;
 	g_iCvarStumble = g_hCvarStumble.IntValue;
 	g_iCvarStyle = g_hCvarStyle.IntValue;
+	g_fCvarTime = g_hCvarTime.FloatValue;
 	g_iCvarVocalize = g_hCvarVocalize.IntValue;
 }
 
@@ -574,7 +580,7 @@ Action CmdAirstrikeMake(int client, int args)
 		int type = StringToInt(arg1);
 		if( type != 1 && type != 2 )
 		{
-			ReplyToCommand(client, "Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> OR vector position <X> <Y> <Z> <angle> [optional number of airstrikes]");
+			ReplyToCommand(client, "Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> [optional number of airstrikes] -OR- vector position <X> <Y> <Z> <angle> [optional number of airstrikes]");
 			return Plugin_Handled;
 		}
 
@@ -644,7 +650,7 @@ Action CmdAirstrikeMake(int client, int args)
 							dPack.WriteCell(vPos[1]);
 							dPack.WriteCell(vPos[2]);
 							dPack.WriteCell(direction);
-							CreateTimer(x / DELAY_INTERVAL, TimerDelayStrike, dPack);
+							CreateTimer(x * g_fCvarTime, TimerDelayStrike, dPack);
 						}
 					}
 
@@ -669,7 +675,7 @@ Action CmdAirstrikeMake(int client, int args)
 						dPack.WriteCell(vPos[1]);
 						dPack.WriteCell(vPos[2]);
 						dPack.WriteCell(vAng[1]);
-						CreateTimer(x / DELAY_INTERVAL, TimerDelayStrike, dPack);
+						CreateTimer(x * g_fCvarTime, TimerDelayStrike, dPack);
 					}
 				}
 
@@ -713,7 +719,7 @@ Action CmdAirstrikeMake(int client, int args)
 				dPack.WriteCell(vPos[1]);
 				dPack.WriteCell(vPos[2]);
 				dPack.WriteCell(direction);
-				CreateTimer(x / DELAY_INTERVAL, TimerDelayStrike, dPack);
+				CreateTimer(x * g_fCvarTime, TimerDelayStrike, dPack);
 			}
 		}
 
@@ -723,7 +729,7 @@ Action CmdAirstrikeMake(int client, int args)
 
 	else
 	{
-		ReplyToCommand(client, "Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> OR vector position <X> <Y> <Z> <angle> [optional number of airstrikes]");
+		ReplyToCommand(client, "Usage: sm_strikes <#userid|name> <type: 1=Aim position. 2=On position> [optional number of airstrikes] -OR- vector position <X> <Y> <Z> <angle> [optional number of airstrikes]");
 	}
 
 	return Plugin_Handled;
@@ -783,7 +789,7 @@ int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 						dPack.WriteCell(vPos[1]);
 						dPack.WriteCell(vPos[2]);
 						dPack.WriteCell(direction);
-						CreateTimer(x / DELAY_INTERVAL, TimerDelayStrike, dPack);
+						CreateTimer(x * g_fCvarTime, TimerDelayStrike, dPack);
 					}
 				}
 
@@ -811,7 +817,7 @@ int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 					dPack.WriteCell(vPos[1]);
 					dPack.WriteCell(vPos[2]);
 					dPack.WriteCell(vAng[1]);
-					CreateTimer(x / DELAY_INTERVAL, TimerDelayStrike, dPack);
+					CreateTimer(x * g_fCvarTime, TimerDelayStrike, dPack);
 				}
 			}
 
@@ -1249,11 +1255,7 @@ Action TimerBombTouch(Handle timer, int entity)
 
 	if( g_iCvarHorde && GetRandomInt(1, 100) <= g_iCvarHorde )
 	{
-		SetVariantString("OnTrigger director:ForcePanicEvent::1:-1");
-		AcceptEntityInput(entity, "AddOutput");
-		SetVariantString("OnTrigger @director:ForcePanicEvent::1:-1");
-		AcceptEntityInput(entity, "AddOutput");
-		AcceptEntityInput(entity, "Trigger");
+		L4D_ForcePanicEvent();
 	}
 
 	float vPos[3];
@@ -1466,4 +1468,29 @@ void StaggerClient(int iUserID, const float fPos[3])
 	SetVariantString(sBuffer);
 	AcceptEntityInput(iScriptLogic, "RunScriptCode");
 	RemoveEntity(iScriptLogic);
+}
+
+void L4D_ForcePanicEvent()
+{
+	static int director = INVALID_ENT_REFERENCE;
+
+	if( director == INVALID_ENT_REFERENCE || EntRefToEntIndex(director) == INVALID_ENT_REFERENCE )
+	{
+		director = FindEntityByClassname(-1, "info_director");
+		if( director != INVALID_ENT_REFERENCE )
+		{
+			director = EntIndexToEntRef(director);
+		}
+	}
+
+	if( director != INVALID_ENT_REFERENCE )
+	{
+		AcceptEntityInput(director, "ForcePanicEvent");
+		return;
+	}
+
+	int flags = GetCommandFlags("director_force_panic_event");
+	SetCommandFlags("director_force_panic_event", flags & ~FCVAR_CHEAT);
+	ServerCommand("director_force_panic_event");
+	SetCommandFlags("director_force_panic_event", flags);
 }
