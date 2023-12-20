@@ -34,7 +34,7 @@
 
 1.12 (20-Dec-2023)
 	- Added cvar "l4d2_airstrike_time" to set the interval between multiple Airstrikes. Requested by "bsdvjhdabf".
-	- Changes to make calling triggering the horde more reliable.
+	- Changes to make triggering the horde more reliable.
 
 1.11 (25-Oct-2023)
 	- Added cvar "l4d2_airstrike_manual" to set how many Airstrikes should hit when using the command or menu to trigger. Requested by "ForTheSakura".
