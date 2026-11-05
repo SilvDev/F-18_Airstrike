@@ -170,6 +170,7 @@ bool g_bCvarAllow, g_bMapStarted;
 
 Handle g_hForwardOnAirstrike, g_hForwardOnMissileHit, g_hForwardPluginState, g_hForwardRoundState;
 int g_iBeamSprite, g_iHaloSprite, g_iPlayerSpawn, g_iRoundStart, g_iEntities[MAX_ENTITIES];
+int g_iOwnerUserId[2048];				// Userid credited for the airstrike, indexed by F-18 / missile entity. -1 = nobody.
 bool g_bDmgHooked, g_bLateLoad, g_bPluginTrigger;
 float g_fCvarTime, g_fLastAirstrike; // Delay airstrike
 
@@ -194,7 +195,8 @@ int Native_ShowAirstrike(Handle plugin, int numParams)
 		GetNativeArray(1, vPos, sizeof(vPos));
 
 		if( g_iCvarRing & RING_ALL ) CreateBeamRing(vPos);
-		ShowAirstrike(vPos, GetNativeCell(2));
+		int userid = (numParams >= 3) ? GetNativeCell(3) : -1;
+		ShowAirstrike(vPos, GetNativeCell(2), userid);
 	}
 
 	return 0;
@@ -655,7 +657,7 @@ Action CmdAirstrikeMake(int client, int args)
 					}
 
 					if( g_iCvarRing & RING_AIM ) CreateBeamRing(vPos);
-					ShowAirstrike(vPos, direction);
+					ShowAirstrike(vPos, direction, -1);
 				}
 
 				delete hTrace;
@@ -680,7 +682,7 @@ Action CmdAirstrikeMake(int client, int args)
 				}
 
 				if( g_iCvarRing & RING_POS ) CreateBeamRing(vPos);
-				ShowAirstrike(vPos, vAng[1]);
+				ShowAirstrike(vPos, vAng[1], -1);
 			}
 		}
 	}
@@ -724,7 +726,7 @@ Action CmdAirstrikeMake(int client, int args)
 		}
 
 		if( g_iCvarRing & RING_POS ) CreateBeamRing(vPos);
-		ShowAirstrike(vPos, direction);
+		ShowAirstrike(vPos, direction, -1);
 	}
 
 	else
@@ -794,7 +796,7 @@ int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 				}
 
 				if( g_iCvarRing & RING_AIM ) CreateBeamRing(vStart);
-				ShowAirstrike(vPos, direction);
+				ShowAirstrike(vPos, direction, -1);
 			}
 
 			delete trace;
@@ -822,7 +824,7 @@ int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 			}
 
 			if( g_iCvarRing & RING_POS ) CreateBeamRing(vPos);
-			ShowAirstrike(vPos, vAng[1]);
+			ShowAirstrike(vPos, vAng[1], -1);
 
 			ShowMenuMain(client);
 		}
@@ -907,17 +909,21 @@ Action TimerDelayStrike(Handle timer, DataPack dPack)
 	vPos[1] = dPack.ReadCell();
 	vPos[2] = dPack.ReadCell();
 	direction = dPack.ReadCell();
+	int userid = dPack.ReadCell();
 
-	ShowAirstrike(vPos, direction);
+	ShowAirstrike(vPos, direction, userid);
 
 	delete dPack;
 
 	return Plugin_Continue;
 }
 
-void ShowAirstrike(float vPos[3], float direction)
+void ShowAirstrike(float vPos[3], float direction, int client = -1)
 {
-	// Delay if same frame
+	int userid;
+	userid = client != -1 ? GetClientUserId(client) : -1;
+
+ 	// Delay if same frame
 	if( GetGameTime() == g_fLastAirstrike )
 	{
 		DataPack dPack = new DataPack();
@@ -925,6 +931,7 @@ void ShowAirstrike(float vPos[3], float direction)
 		dPack.WriteCell(vPos[1]);
 		dPack.WriteCell(vPos[2]);
 		dPack.WriteCell(direction);
+		dPack.WriteCell(userid);
 		CreateTimer(0.1, TimerDelayStrike, dPack);
 		return;
 	}
@@ -955,6 +962,7 @@ void ShowAirstrike(float vPos[3], float direction)
 
 	int entity = CreateEntityByName("prop_dynamic_override");
 	g_iEntities[index] = EntIndexToEntRef(entity);
+	g_iOwnerUserId[entity] = userid;
 	DispatchKeyValue(entity, "targetname", "silver_f18_model");
 	DispatchKeyValue(entity, "disableshadows", "1");
 	DispatchKeyValue(entity, "model", MODEL_F18);
@@ -1035,6 +1043,7 @@ Action TimerDrop(Handle timer, int f18)
 		GetEntPropVector(f18, Prop_Data, "m_angRotation", vAng);
 
 		int entity = CreateEntityByName("grenade_launcher_projectile");
+		g_iOwnerUserId[entity] = g_iOwnerUserId[EntRefToEntIndex(f18)];
 		DispatchSpawn(entity);
 		SetEntityModel(entity, MODEL_AGM65);
 
@@ -1260,6 +1269,7 @@ Action TimerBombTouch(Handle timer, int entity)
 
 	float vPos[3];
 	char sTemp[8];
+	int owner = GetClientOfUserId(g_iOwnerUserId[EntRefToEntIndex(entity)]);
 	GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", vPos);
 	RemoveEntity(entity);
 	IntToString(g_iCvarDamage, sTemp, sizeof(sTemp));
@@ -1279,6 +1289,10 @@ Action TimerBombTouch(Handle timer, int entity)
 	DispatchKeyValue(entity, "iRadiusOverride", sTemp);
 	DispatchSpawn(entity);
 	SetEntProp(entity, Prop_Data, "m_iHammerID", 1078682);
+	if( owner && IsClientInGame(owner) )
+	{
+		SetEntPropEnt(entity, Prop_Data, "m_hOwnerEntity", owner); // Kills and damage are credited to this client
+	}
 	TeleportEntity(entity, vPos, NULL_VECTOR, NULL_VECTOR);
 	AcceptEntityInput(entity, "Explode");
 

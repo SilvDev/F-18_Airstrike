@@ -6,12 +6,17 @@
 
 /**
  * @brief Creates an F-18 AirStrike at the location and from the direction specified.
+ * @remarks if client id is passed, sets the explosion's owner
+ *          so events like infected_death / player_death report them as attacker.
+ *          Otherwise no one will get credits for the kills.
  *
  * @param		origin       Vector origin.
  * @param		direction    float angle direction for the jet to appear.
+ * @param		client       Client id to credit the kills/damage done by the AirStrike.
+ * 
  * @return		none.
  */
-native void F18_ShowAirstrike(float origin[3], float direction);
+native void F18_ShowAirstrike(float origin[3], float direction, int client = -1);
 
 
 /**
